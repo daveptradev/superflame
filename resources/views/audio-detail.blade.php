@@ -170,16 +170,19 @@
 
                     </div>
 
-                    <!-- RIGHT: DURATION / STATUS -->
-                    <div class="flex items-center gap-4 flex-shrink-0 pl-4">
-                        <span class="text-xs font-semibold text-gray-500 group-hover:text-gray-300">
-                            Stream
-                        </span>
-                        <div class="w-8 h-8 rounded-full bg-white/5 group-hover:bg-red-500 group-hover:text-white text-gray-400 flex items-center justify-center transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-current ml-0.5" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z"/>
+                    <!-- RIGHT: FREE DOWNLOAD BUTTON -->
+                    <div class="flex items-center gap-3 flex-shrink-0 pl-3">
+                        <a href="{{ asset('storage/' . $track->file_path) }}"
+                           download="{{ $track->title }}"
+                           onclick="event.stopPropagation()"
+                           title="Download {{ $track->title }}"
+                           class="px-4 py-2 bg-white/5 hover:bg-red-600 border border-white/10 hover:border-red-500 text-gray-300 hover:text-white rounded-full text-xs font-bold tracking-wider uppercase transition duration-300 flex items-center gap-2 shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
-                        </div>
+                            <span class="hidden sm:inline">Free Download</span>
+                            <span class="sm:hidden">Download</span>
+                        </a>
                     </div>
 
                 </div>

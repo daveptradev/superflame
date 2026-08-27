@@ -36,6 +36,10 @@
     </div>
     @endif
 
+    <div id="jsErrorAlert" class="hidden mb-6 bg-red-500/10 border border-red-500/20 text-red-400 p-5 rounded-2xl">
+        <p class="font-bold mb-1" id="jsErrorMessage"></p>
+    </div>
+
     <form action="/admin/audios"
           method="POST"
           enctype="multipart/form-data"
@@ -208,14 +212,15 @@
             <div id="tracksList" class="mt-4 space-y-3"></div>
         </div>
 
-        <!-- SUBMIT -->
+        <!-- SUBMIT BUTTON -->
         <div class="pt-6">
             <button type="submit"
+                    id="submitBtn"
                     class="bg-red-600 hover:bg-red-700 px-10 py-4 rounded-2xl font-bold text-white transition inline-flex items-center gap-2 shadow-lg shadow-red-600/30">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                Save Audio & Tracks
+                <span>Save Audio & Tracks</span>
             </button>
         </div>
 
@@ -223,12 +228,59 @@
 
 </div>
 
-<!-- DRAG & DROP SCRIPT -->
+<!-- ============================================== -->
+<!-- FULLSCREEN UPLOAD PROGRESS OVERLAY MODAL -->
+<!-- ============================================== -->
+<div id="uploadModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+        
+        <!-- GLOW -->
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"></div>
+
+        <!-- SPINNER / ICON -->
+        <div class="w-20 h-20 mx-auto mb-5 relative flex items-center justify-center">
+            <div class="w-20 h-20 rounded-full border-4 border-white/10 border-t-red-600 animate-spin absolute inset-0"></div>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-red-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+        </div>
+
+        <h3 id="uploadStatusTitle" class="text-xl font-bold text-white mb-1">
+            Uploading Audio Tracks...
+        </h3>
+        <p id="uploadStatusSubtitle" class="text-xs text-gray-400 mb-6">
+            Please wait while your files are being uploaded to the server. Do not close this window.
+        </p>
+
+        <!-- PROGRESS BAR -->
+        <div class="w-full bg-white/10 h-3 rounded-full overflow-hidden mb-3 p-0.5">
+            <div id="uploadProgressBar" class="bg-gradient-to-r from-red-600 to-orange-500 h-full rounded-full w-0 transition-all duration-200"></div>
+        </div>
+
+        <!-- PERCENTAGE & SPEED -->
+        <div class="flex items-center justify-between text-xs font-mono">
+            <span id="uploadPercentText" class="text-red-400 font-bold">0%</span>
+            <span id="uploadSizeText" class="text-gray-400">0 MB / 0 MB</span>
+        </div>
+
+    </div>
+</div>
+
+<!-- DRAG & DROP & AJAX UPLOAD SCRIPT -->
 <script>
 const dropZone = document.getElementById('dropZone');
 const audioFileInput = document.getElementById('audioFileInput');
 const tracksList = document.getElementById('tracksList');
 const trackCountBadge = document.getElementById('trackCountBadge');
+const audioForm = document.getElementById('audioForm');
+const submitBtn = document.getElementById('submitBtn');
+
+const uploadModal = document.getElementById('uploadModal');
+const uploadProgressBar = document.getElementById('uploadProgressBar');
+const uploadPercentText = document.getElementById('uploadPercentText');
+const uploadSizeText = document.getElementById('uploadSizeText');
+const uploadStatusTitle = document.getElementById('uploadStatusTitle');
+const uploadStatusSubtitle = document.getElementById('uploadStatusSubtitle');
 
 let selectedFiles = [];
 
@@ -329,6 +381,73 @@ function renderTracksList() {
         tracksList.appendChild(card);
     });
 }
+
+// REAL AJAX FORM SUBMIT WITH PROGRESS BAR
+audioForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(audioForm);
+    
+    // Show Modal
+    uploadModal.classList.remove('hidden');
+    uploadModal.classList.add('flex');
+    submitBtn.disabled = true;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', audioForm.action, true);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+    xhr.upload.onprogress = function(event) {
+        if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            const loadedMB = (event.loaded / (1024 * 1024)).toFixed(1);
+            const totalMB = (event.total / (1024 * 1024)).toFixed(1);
+
+            uploadProgressBar.style.width = percentComplete + '%';
+            uploadPercentText.innerText = percentComplete + '%';
+            uploadSizeText.innerText = `${loadedMB} MB / ${totalMB} MB`;
+
+            if (percentComplete >= 100) {
+                uploadStatusTitle.innerText = 'Processing & Saving Files...';
+                uploadStatusSubtitle.innerText = 'Finishing up on the server. Please hold on a moment...';
+            }
+        }
+    };
+
+    xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 400) {
+            uploadStatusTitle.innerText = 'Upload Complete!';
+            uploadPercentText.innerText = '100%';
+            uploadProgressBar.style.width = '100%';
+            window.location.href = '/admin/audios';
+        } else {
+            uploadModal.classList.add('hidden');
+            uploadModal.classList.remove('flex');
+            submitBtn.disabled = false;
+
+            const jsErrorAlert = document.getElementById('jsErrorAlert');
+            const jsErrorMessage = document.getElementById('jsErrorMessage');
+            jsErrorAlert.classList.remove('hidden');
+            
+            try {
+                const res = JSON.parse(xhr.responseText);
+                jsErrorMessage.innerText = res.message || 'Upload failed. Please check file sizes and try again.';
+            } catch(e) {
+                jsErrorMessage.innerText = 'Upload failed with status code ' + xhr.status + '. Please check server upload limits.';
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    xhr.onerror = function() {
+        uploadModal.classList.add('hidden');
+        uploadModal.classList.remove('flex');
+        submitBtn.disabled = false;
+        alert('Network connection error occurred during upload. Please try again.');
+    };
+
+    xhr.send(formData);
+});
 </script>
 
 @endsection

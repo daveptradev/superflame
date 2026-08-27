@@ -213,7 +213,7 @@
 </section>
 
 <!-- ================================================================= -->
-<!-- SOUNDCLOUD REAL CANVAS WAVEFORM MINI PLAYER -->
+<!-- SOUNDCLOUD REAL CANVAS WAVEFORM MINI PLAYER (ACCURATE 1:1 HOVER) -->
 <!-- ================================================================= -->
 <div id="miniPlayer"
      class="fixed bottom-0 left-0 right-0 z-50 bg-[#080808]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl transition-all duration-500 transform translate-y-full">
@@ -282,14 +282,19 @@
                 </div>
 
                 <!-- REAL SOUNDCLOUD CANVAS WAVEFORM CONTAINER -->
-                <div class="w-full relative group py-0.5">
+                <div id="waveformWrapper" class="w-full relative group py-0.5">
                     <!-- FLOATING TIMESTAMP TOOLTIP ON HOVER -->
-                    <div id="hoverTooltip" class="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-6 bg-red-600 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow transition duration-150 transform -translate-x-1/2">
+                    <div id="hoverTooltip"
+                         class="opacity-0 pointer-events-none absolute -top-6 bg-red-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded shadow-lg transition-opacity duration-150 transform -translate-x-1/2 z-20">
                         00:00
                     </div>
 
+                    <!-- HOVER INDICATOR LINE -->
+                    <div id="hoverLine"
+                         class="opacity-0 pointer-events-none absolute top-0 bottom-0 w-[1px] bg-white/60 transition-opacity duration-150 z-10"></div>
+
                     <canvas id="waveformCanvas"
-                            class="w-full h-11 cursor-pointer rounded-lg transition"
+                            class="w-full h-11 cursor-pointer rounded-lg block"
                             height="44"></canvas>
                 </div>
 
@@ -333,7 +338,7 @@
 <!-- NATIVE AUDIO ELEMENT -->
 <audio id="nativeAudioPlayer" preload="auto"></audio>
 
-<!-- SOUNDCLOUD REAL CANVAS WAVEFORM VISUALIZER SCRIPT -->
+<!-- SOUNDCLOUD REAL CANVAS WAVEFORM ENGINE -->
 <script>
 const tracks = [
     @if(isset($audio->tracks))
@@ -346,11 +351,10 @@ const tracks = [
     @endif
 ];
 
-const NUM_BARS = 100;
-const peaksCache = {}; // Cache decoded real peaks per track URL
+const NUM_BARS = 120;
+const peaksCache = {}; // In-memory cache for true decoded waveform peaks
 let currentTrackIndex = -1;
 let waveformPeaks = [];
-let targetPeaks = [];
 let hoverProgress = -1;
 let audioCtx = null;
 let animFrameId = null;
@@ -364,18 +368,21 @@ const currentTimeText = document.getElementById('currentTimeText');
 const durationText = document.getElementById('durationText');
 const volumeSlider = document.getElementById('volumeSlider');
 const waveformCanvas = document.getElementById('waveformCanvas');
+const waveformWrapper = document.getElementById('waveformWrapper');
 const hoverTooltip = document.getElementById('hoverTooltip');
+const hoverLine = document.getElementById('hoverLine');
 const ctx = waveformCanvas.getContext('2d');
 
 nativePlayer.volume = 0.8;
 
-// BACKGROUND PRE-DECODE REAL PEAKS FOR ALL TRACKS ON PAGE LOAD
+// FAST PRE-DECODE TRUE PEAKS FOR ALL TRACKS ON PAGE LOAD
 function predecodeAllTracks() {
     tracks.forEach((t) => {
         decodeTrackPeaks(t.src);
     });
 }
 
+// EXTRACT TRUE RMS & PEAK AMPLITUDES FROM AUDIO BUFFER
 function decodeTrackPeaks(src) {
     if (peaksCache[src]) return Promise.resolve(peaksCache[src]);
 
@@ -389,74 +396,56 @@ function decodeTrackPeaks(src) {
             const rawData = audioBuffer.getChannelData(0);
             const step = Math.floor(rawData.length / NUM_BARS);
             const realPeaks = [];
+            
             for (let i = 0; i < NUM_BARS; i++) {
-                let min = 1.0, max = -1.0;
-                for (let j = 0; j < step; j++) {
-                    const datum = rawData[(i * step) + j];
-                    if (datum < min) min = datum;
-                    if (datum > max) max = datum;
+                let sum = 0;
+                let peak = 0;
+                const offset = i * step;
+                for (let j = 0; j < step; j += 4) { // Fast 4x sample skip
+                    const val = Math.abs(rawData[offset + j]);
+                    sum += val * val;
+                    if (val > peak) peak = val;
                 }
-                realPeaks.push(Math.max(0.12, Math.min(0.95, (max - min) * 0.9)));
+                const rms = Math.sqrt(sum / (step / 4));
+                realPeaks.push((rms * 0.7) + (peak * 0.3));
             }
-            peaksCache[src] = realPeaks;
-            return realPeaks;
+
+            // Normalize peaks so dynamic range matches real track energy
+            const maxVal = Math.max(...realPeaks, 0.05);
+            const normalized = realPeaks.map(p => Math.max(0.1, Math.min(0.95, (p / maxVal))));
+
+            peaksCache[src] = normalized;
+            return normalized;
         })
         .catch(err => {
-            // If CORS or offline, fallback to realistic techno envelope
             return null;
         });
 }
 
-// GENERATE OR RETRIEVE PEAKS FOR CURRENT TRACK
+// SETUP WAVEFORM FOR SELECTED TRACK
 function setupWaveformForTrack(src) {
     if (peaksCache[src]) {
-        // Real peaks already cached in memory -> INSTANT display of true waveform!
+        // True waveform is already in memory -> ZERO delay, exact shape!
         waveformPeaks = [...peaksCache[src]];
         drawWaveform();
     } else {
-        // Generate realistic initial distribution while decoding in background
-        waveformPeaks = Array.from({ length: NUM_BARS }, (_, i) => {
-            const noise = ((Math.sin(i * 99) * 10000) % 1);
-            const beat = (i % 8 === 0 || i % 8 === 4) ? 0.35 : 0;
-            return Math.max(0.18, Math.min(0.85, 0.3 + (Math.abs(noise) * 0.35) + beat));
-        });
+        // Initial flat clean waveform while decode completes
+        waveformPeaks = Array.from({ length: NUM_BARS }, () => 0.25);
         drawWaveform();
 
-        // Decode in background and smooth transition
         decodeTrackPeaks(src).then(realPeaks => {
             if (realPeaks && currentTrackIndex >= 0 && tracks[currentTrackIndex].src === src) {
-                animatePeaksTransition(realPeaks);
+                waveformPeaks = [...realPeaks];
+                drawWaveform();
             }
         });
     }
 }
 
-// SMOOTH TRANSITION TO REAL PEAKS
-function animatePeaksTransition(newPeaks) {
-    if (animFrameId) cancelAnimationFrame(animFrameId);
-
-    function step() {
-        let maxDiff = 0;
-        for (let i = 0; i < NUM_BARS; i++) {
-            const diff = newPeaks[i] - waveformPeaks[i];
-            waveformPeaks[i] += diff * 0.25;
-            if (Math.abs(diff) > maxDiff) maxDiff = Math.abs(diff);
-        }
-        drawWaveform();
-        if (maxDiff > 0.01) {
-            animFrameId = requestAnimationFrame(step);
-        } else {
-            waveformPeaks = [...newPeaks];
-            drawWaveform();
-        }
-    }
-    step();
-}
-
-// DRAW SOUNDCLOUD DUAL-TONE WAVEFORM ON CANVAS
+// DRAW SOUNDCLOUD DUAL-TONE CANVAS WAVEFORM (100% PRECISE 1:1 FIT)
 function drawWaveform() {
     const width = waveformCanvas.clientWidth || 600;
-    const height = waveformCanvas.height;
+    const height = waveformCanvas.height || 44;
     
     if (waveformCanvas.width !== width) {
         waveformCanvas.width = width;
@@ -465,46 +454,44 @@ function drawWaveform() {
     ctx.clearRect(0, 0, width, height);
 
     const totalBars = waveformPeaks.length || NUM_BARS;
-    const barWidth = 3;
-    const barGap = 2;
-    const effectiveTotalWidth = totalBars * (barWidth + barGap);
-    const startX = (width - effectiveTotalWidth) / 2;
+    const slotWidth = width / totalBars;
+    const barWidth = Math.max(1.8, slotWidth * 0.62);
 
     const currentProgress = (nativePlayer.duration && nativePlayer.duration > 0)
         ? (nativePlayer.currentTime / nativePlayer.duration)
         : 0;
 
     for (let i = 0; i < totalBars; i++) {
-        const barHeight = Math.max(4, (waveformPeaks[i] || 0.3) * (height - 8));
-        const x = startX + (i * (barWidth + barGap));
+        const barHeight = Math.max(4, (waveformPeaks[i] || 0.2) * (height - 8));
+        const x = i * slotWidth;
         const y = (height - barHeight) / 2;
-        const barProgress = i / totalBars;
+        const barProgress = (i + 0.5) / totalBars;
 
-        // Soundcloud Color Logic
+        // Soundcloud Color
         if (barProgress <= currentProgress) {
-            ctx.fillStyle = '#ef4444'; // Played (Red)
+            ctx.fillStyle = '#ef4444'; // Played: Red
         } else if (hoverProgress >= 0 && barProgress <= hoverProgress) {
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.4)'; // Hover preview
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.45)'; // Hover Preview
         } else {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // Unplayed (Translucent White)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // Unplayed: Translucent White
         }
 
         // Draw Rounded Bar
         ctx.beginPath();
         if (ctx.roundRect) {
-            ctx.roundRect(x, y, barWidth, barHeight, 2);
+            ctx.roundRect(x, y, barWidth, barHeight, 1.5);
         } else {
             ctx.rect(x, y, barWidth, barHeight);
         }
         ctx.fill();
     }
 
-    // Draw White Needle Cursor at playhead
-    const cursorX = startX + (currentProgress * effectiveTotalWidth);
+    // Draw White Needle Playhead Cursor
+    const cursorX = currentProgress * width;
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cursorX - 1, 2, 2, height - 4);
+    ctx.fillRect(Math.max(0, cursorX - 1), 2, 2, height - 4);
 
-    // Glow dot on needle
+    // Needle Top Dot
     ctx.beginPath();
     ctx.arc(cursorX, 4, 3, 0, Math.PI * 2);
     ctx.fillStyle = '#ef4444';
@@ -610,35 +597,47 @@ function updateActiveTrackRow() {
     });
 }
 
-// TIMELINE SEEKING VIA CLICK ON CANVAS
-function seekFromEvent(e) {
+// PRECISE 1:1 TIMELINE SEEKING & HOVER TOOLTIP
+function getProgressFromEvent(e) {
     const rect = waveformCanvas.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const progress = Math.max(0, Math.min(1, clickX / rect.width));
+    return Math.max(0, Math.min(1, clickX / rect.width));
+}
 
+waveformCanvas.addEventListener('click', (e) => {
+    const progress = getProgressFromEvent(e);
     if (nativePlayer.duration && isFinite(nativePlayer.duration)) {
         nativePlayer.currentTime = progress * nativePlayer.duration;
         drawWaveform();
     }
-}
-
-waveformCanvas.addEventListener('click', seekFromEvent);
+});
 
 waveformCanvas.addEventListener('mousemove', (e) => {
     const rect = waveformCanvas.getBoundingClientRect();
-    const hoverX = e.clientX - rect.left;
-    hoverProgress = Math.max(0, Math.min(1, hoverX / rect.width));
+    const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    hoverProgress = mouseX / rect.width;
     
+    // Position hover line & tooltip exactly on hovered bar
+    hoverLine.style.left = `${mouseX}px`;
+    hoverLine.classList.remove('opacity-0');
+
+    hoverTooltip.style.left = `${mouseX}px`;
+    hoverTooltip.classList.remove('opacity-0');
+
     if (nativePlayer.duration && isFinite(nativePlayer.duration)) {
         const hoverTime = hoverProgress * nativePlayer.duration;
-        hoverTooltip.style.left = `${hoverX}px`;
         hoverTooltip.innerText = formatTime(hoverTime);
+    } else {
+        hoverTooltip.innerText = "00:00";
     }
+
     drawWaveform();
 });
 
 waveformCanvas.addEventListener('mouseleave', () => {
     hoverProgress = -1;
+    hoverLine.classList.add('opacity-0');
+    hoverTooltip.classList.add('opacity-0');
     drawWaveform();
 });
 

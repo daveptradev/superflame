@@ -345,11 +345,40 @@ Route::get('/rosters', function () {
 
 Route::get('/audio', function () {
     try {
-        $audios = Audio::latest()->get();
+        $audios = Audio::with('tracks')->latest()->get();
     } catch (\Throwable $e) {
         $audios = collect();
     }
     return view('audio', compact('audios'));
+});
+
+Route::get('/audio/{slug}', function ($slug) {
+    $audio = Audio::with('tracks')->where('slug', $slug)->first();
+
+    if (!$audio) {
+        // Fallback: If not found by slug, try by ID or fallback
+        $audio = Audio::with('tracks')->find($slug);
+    }
+
+    if (!$audio) {
+        // Mock fallback if user clicks supernova before database entry
+        $audio = (object)[
+            'id' => 0,
+            'title' => 'SUPERNOVA EDIT PACK',
+            'slug' => 'supernova-edit-pack',
+            'artist' => 'SUPERFLAME',
+            'category' => 'EDIT PACK',
+            'description' => 'Raw industrial grooves and underground energy recorded live during SUPERFLAME sessions.',
+            'image' => 'audio/supernova.png',
+            'audio_url' => 'https://soundcloud.com/superflame99/sets/supernova',
+            'buy_url' => 'https://lynk.id/superflame',
+            'buy_label' => 'Buy Now',
+            'release_date' => date('Y-m-d'),
+            'tracks' => collect()
+        ];
+    }
+
+    return view('audio-detail', compact('audio'));
 });
 
 Route::get('/profile', function () {
@@ -720,6 +749,7 @@ Route::middleware(['auth', 'admin'])
         |--------------------------------------------------------------------------
         */
 
+        Route::delete('/audios/track/{track}', [AudioController::class, 'deleteTrack']);
         Route::resource('audios', AudioController::class);
 
     });

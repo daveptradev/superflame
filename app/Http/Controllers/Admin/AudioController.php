@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Audio;
+use App\Models\AudioTrack;
 use Illuminate\Support\Str;
 
 class AudioController extends Controller
@@ -51,7 +52,7 @@ class AudioController extends Controller
     public function index()
     {
         try {
-            $audios = Audio::latest()->get();
+            $audios = Audio::with('tracks')->latest()->get();
         } catch (\Throwable $e) {
             $audios = collect();
             session()->flash('error', 'Tabel database "audios" belum ada di database Hostinger. Silakan jalankan query SQL di phpMyAdmin.');
@@ -74,18 +75,20 @@ class AudioController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'title'        => 'required|string|max:255',
-            'artist'       => 'nullable|string|max:255',
-            'category'     => 'nullable|string|max:100',
-            'image'        => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'audio_url'    => 'nullable|string|max:500',
-            'audio_file'   => 'nullable|mimes:mp3,wav,ogg,flac,m4a|max:25600',
-            'buy_url'      => 'nullable|string|max:500',
-            'buy_label'    => 'nullable|string|max:100',
-            'release_date' => 'nullable|date',
-            'description'  => 'nullable|string',
+            'title'          => 'required|string|max:255',
+            'artist'         => 'nullable|string|max:255',
+            'category'       => 'nullable|string|max:100',
+            'image'          => 'required|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'audio_url'      => 'nullable|string|max:500',
+            'buy_url'        => 'nullable|string|max:500',
+            'buy_label'      => 'nullable|string|max:100',
+            'release_date'   => 'nullable|date',
+            'description'    => 'nullable|string',
+            'tracks.*'       => 'nullable|mimes:mp3,wav,ogg,flac,m4a,aac|max:51200',
+            'track_titles.*' => 'nullable|string|max:255',
         ]);
 
+        // 1. Upload Cover Image
         $imagePath = null;
         if ($request->hasFile('image')) {
             $imageFile = $request->file('image');
@@ -95,16 +98,8 @@ class AudioController extends Controller
             $imagePath = 'audio/' . $imageName;
         }
 
-        $audioFilePath = null;
-        if ($request->hasFile('audio_file')) {
-            $audioFile = $request->file('audio_file');
-            $audioName = time() . '_' . Str::slug(pathinfo($audioFile->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $audioFile->getClientOriginalExtension();
-            $destDir   = $this->getUploadDirectory('audio/files');
-            $audioFile->move($destDir, $audioName);
-            $audioFilePath = 'audio/files/' . $audioName;
-        }
-
-        Audio::create([
+        // 2. Create Audio Main Record
+        $audio = Audio::create([
             'title'        => $request->title,
             'slug'         => Str::slug($request->title) . '-' . time(),
             'artist'       => $request->artist ?: 'SUPERFLAME',
@@ -112,14 +107,37 @@ class AudioController extends Controller
             'description'  => $request->description,
             'image'        => $imagePath,
             'audio_url'    => $request->audio_url,
-            'audio_file'   => $audioFilePath,
             'buy_url'      => $request->buy_url,
             'buy_label'    => $request->buy_label ?: 'Buy Now',
             'release_date' => $request->release_date,
         ]);
 
+        // 3. Upload Multi-Tracks
+        if ($request->hasFile('tracks')) {
+            $trackFiles  = $request->file('tracks');
+            $trackTitles = $request->input('track_titles', []);
+            $trackDir    = $this->getUploadDirectory('audio/tracks');
+
+            foreach ($trackFiles as $index => $trackFile) {
+                if ($trackFile && $trackFile->isValid()) {
+                    $originalName = pathinfo($trackFile->getClientOriginalName(), PATHINFO_FILENAME);
+                    $cleanTitle   = !empty($trackTitles[$index]) ? trim($trackTitles[$index]) : $originalName;
+
+                    $trackFileName = time() . '_' . ($index + 1) . '_' . Str::slug($originalName) . '.' . $trackFile->getClientOriginalExtension();
+                    $trackFile->move($trackDir, $trackFileName);
+
+                    AudioTrack::create([
+                        'audio_id'     => $audio->id,
+                        'title'        => $cleanTitle,
+                        'file_path'    => 'audio/tracks/' . $trackFileName,
+                        'track_number' => $index + 1,
+                    ]);
+                }
+            }
+        }
+
         return redirect('/admin/audios')
-            ->with('success', 'Audio successfully added');
+            ->with('success', 'Audio release successfully added with tracks');
     }
 
     // =========================
@@ -127,6 +145,7 @@ class AudioController extends Controller
     // =========================
     public function edit(Audio $audio)
     {
+        $audio->load('tracks');
         return view('admin.audios.edit', compact('audio'));
     }
 
@@ -136,18 +155,21 @@ class AudioController extends Controller
     public function update(Request $request, Audio $audio)
     {
         $request->validate([
-            'title'        => 'required|string|max:255',
-            'artist'       => 'nullable|string|max:255',
-            'category'     => 'nullable|string|max:100',
-            'image'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
-            'audio_url'    => 'nullable|string|max:500',
-            'audio_file'   => 'nullable|mimes:mp3,wav,ogg,flac,m4a|max:25600',
-            'buy_url'      => 'nullable|string|max:500',
-            'buy_label'    => 'nullable|string|max:100',
-            'release_date' => 'nullable|date',
-            'description'  => 'nullable|string',
+            'title'          => 'required|string|max:255',
+            'artist'         => 'nullable|string|max:255',
+            'category'       => 'nullable|string|max:100',
+            'image'          => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'audio_url'      => 'nullable|string|max:500',
+            'buy_url'        => 'nullable|string|max:500',
+            'buy_label'      => 'nullable|string|max:100',
+            'release_date'   => 'nullable|date',
+            'description'    => 'nullable|string',
+            'tracks.*'       => 'nullable|mimes:mp3,wav,ogg,flac,m4a,aac|max:51200',
+            'track_titles.*' => 'nullable|string|max:255',
+            'existing_track_titles' => 'nullable|array',
         ]);
 
+        // 1. Cover Image Update
         $imagePath = $audio->image;
         if ($request->hasFile('image')) {
             $this->deleteStorageFile($audio->image);
@@ -159,17 +181,7 @@ class AudioController extends Controller
             $imagePath = 'audio/' . $imageName;
         }
 
-        $audioFilePath = $audio->audio_file;
-        if ($request->hasFile('audio_file')) {
-            $this->deleteStorageFile($audio->audio_file);
-
-            $audioFile = $request->file('audio_file');
-            $audioName = time() . '_' . Str::slug(pathinfo($audioFile->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $audioFile->getClientOriginalExtension();
-            $destDir   = $this->getUploadDirectory('audio/files');
-            $audioFile->move($destDir, $audioName);
-            $audioFilePath = 'audio/files/' . $audioName;
-        }
-
+        // 2. Update Main Record
         $audio->update([
             'title'        => $request->title,
             'slug'         => Str::slug($request->title) . '-' . $audio->id,
@@ -178,27 +190,80 @@ class AudioController extends Controller
             'description'  => $request->description,
             'image'        => $imagePath,
             'audio_url'    => $request->audio_url,
-            'audio_file'   => $audioFilePath,
             'buy_url'      => $request->buy_url,
             'buy_label'    => $request->buy_label ?: 'Buy Now',
             'release_date' => $request->release_date,
         ]);
 
+        // 3. Update Existing Track Titles
+        if ($request->has('existing_track_titles')) {
+            foreach ($request->input('existing_track_titles') as $trackId => $newTitle) {
+                AudioTrack::where('id', $trackId)
+                    ->where('audio_id', $audio->id)
+                    ->update(['title' => $newTitle]);
+            }
+        }
+
+        // 4. Upload Additional Tracks
+        if ($request->hasFile('tracks')) {
+            $trackFiles  = $request->file('tracks');
+            $trackTitles = $request->input('track_titles', []);
+            $trackDir    = $this->getUploadDirectory('audio/tracks');
+            $currentMaxOrder = $audio->tracks()->max('track_number') ?? 0;
+
+            foreach ($trackFiles as $index => $trackFile) {
+                if ($trackFile && $trackFile->isValid()) {
+                    $originalName = pathinfo($trackFile->getClientOriginalName(), PATHINFO_FILENAME);
+                    $cleanTitle   = !empty($trackTitles[$index]) ? trim($trackTitles[$index]) : $originalName;
+
+                    $trackFileName = time() . '_' . ($currentMaxOrder + $index + 1) . '_' . Str::slug($originalName) . '.' . $trackFile->getClientOriginalExtension();
+                    $trackFile->move($trackDir, $trackFileName);
+
+                    AudioTrack::create([
+                        'audio_id'     => $audio->id,
+                        'title'        => $cleanTitle,
+                        'file_path'    => 'audio/tracks/' . $trackFileName,
+                        'track_number' => $currentMaxOrder + $index + 1,
+                    ]);
+                }
+            }
+        }
+
         return redirect('/admin/audios')
-            ->with('success', 'Audio successfully updated');
+            ->with('success', 'Audio updated successfully');
     }
 
     // =========================
-    // DESTROY
+    // DELETE SINGLE TRACK
+    // =========================
+    public function deleteTrack(AudioTrack $track)
+    {
+        $audioId = $track->audio_id;
+        $this->deleteStorageFile($track->file_path);
+        $track->delete();
+
+        return redirect()->back()
+            ->with('success', 'Track removed successfully');
+    }
+
+    // =========================
+    // DESTROY ALL
     // =========================
     public function destroy(Audio $audio)
     {
+        // 1. Delete cover image
         $this->deleteStorageFile($audio->image);
-        $this->deleteStorageFile($audio->audio_file);
 
+        // 2. Delete all tracks files
+        foreach ($audio->tracks as $track) {
+            $this->deleteStorageFile($track->file_path);
+            $track->delete();
+        }
+
+        // 3. Delete audio record
         $audio->delete();
 
         return redirect('/admin/audios')
-            ->with('success', 'Audio successfully deleted');
+            ->with('success', 'Audio release and all tracks deleted successfully');
     }
 }

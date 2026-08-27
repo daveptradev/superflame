@@ -24,4 +24,9 @@ class Audio extends Model
         'buy_label',
         'release_date',
     ];
+
+    public function tracks()
+    {
+        return $this->hasMany(AudioTrack::class, 'audio_id')->orderBy('track_number')->orderBy('id');
+    }
 }

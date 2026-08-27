@@ -69,6 +69,12 @@
                     </button>
                 
                     <button
+                        onclick="filterAudio('EDIT PACK', this)"
+                        class="category-btn text-sm md:text-base font-semibold tracking-[2px] text-gray-500 hover:text-white transition pb-2">
+                        EDIT PACK
+                    </button>
+
+                    <button
                         onclick="filterAudio('TRACKS', this)"
                         class="category-btn text-sm md:text-base font-semibold tracking-[2px] text-gray-500 hover:text-white transition pb-2">
                         TRACKS
@@ -78,12 +84,6 @@
                         onclick="filterAudio('ALBUM', this)"
                         class="category-btn text-sm md:text-base font-semibold tracking-[2px] text-gray-500 hover:text-white transition pb-2">
                         ALBUM
-                    </button>
-
-                    <button
-                        onclick="filterAudio('EDIT PACK', this)"
-                        class="category-btn text-sm md:text-base font-semibold tracking-[2px] text-gray-500 hover:text-white transition pb-2">
-                        EDIT PACK
                     </button>
                 
                 </div>
@@ -96,13 +96,12 @@
         <div class="grid md:grid-cols-2 gap-8" id="audioGrid">
 
             @forelse($audios as $audio)
-            <!-- CARD -->
+            <!-- CARD (CLICKABLE TO DETAIL TRACKLIST) -->
             <div class="audio-card relative group bg-[#111] border border-white/5 rounded-3xl overflow-hidden hover:border-red-500/40 transition duration-500 flex flex-col justify-between"
                  data-category="{{ strtoupper($audio->category ?? 'TRACKS') }}">
 
-                <!-- IMAGE / COVER -->
-                <a href="{{ $audio->audio_url ?: ($audio->buy_url ?: '#') }}"
-                   @if($audio->audio_url || $audio->buy_url) target="_blank" @endif
+                <!-- IMAGE / COVER (CLICKABLE TO DETAIL) -->
+                <a href="/audio/{{ $audio->slug ?: $audio->id }}"
                    class="block relative overflow-hidden h-[320px] bg-[#181818]">
 
                     @if($audio->image)
@@ -119,13 +118,32 @@
 
                     <div class="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition duration-500"></div>
 
-                    @if($audio->category)
-                    <div class="absolute top-4 left-4">
+                    <!-- PLAY HOVER OVERLAY ICON -->
+                    <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-300">
+                        <div class="w-16 h-16 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl shadow-red-600 transform scale-75 group-hover:scale-100 transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- BADGES -->
+                    <div class="absolute top-4 left-4 flex items-center gap-2">
+                        @if($audio->category)
                         <span class="px-3 py-1 bg-black/70 backdrop-blur border border-white/10 text-red-500 text-xs font-bold uppercase tracking-wider rounded-full">
                             {{ $audio->category }}
                         </span>
+                        @endif
+
+                        @if(isset($audio->tracks) && $audio->tracks->count() > 0)
+                        <span class="px-3 py-1 bg-red-600/80 backdrop-blur text-white text-xs font-bold tracking-wider rounded-full flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13" />
+                            </svg>
+                            {{ $audio->tracks->count() }} Tracks
+                        </span>
+                        @endif
                     </div>
-                    @endif
 
                 </a>
 
@@ -133,7 +151,7 @@
                 <div class="p-7 flex-1 flex flex-col justify-between">
 
                     <div>
-                        <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center justify-between mb-3">
                             <span class="text-xs tracking-[3px] uppercase text-red-500 font-semibold">
                                 {{ $audio->artist ?: 'SUPERFLAME' }}
                             </span>
@@ -144,9 +162,11 @@
                             @endif
                         </div>
 
-                        <h3 class="text-2xl font-extrabold text-white mb-3">
-                            {{ $audio->title }}
-                        </h3>
+                        <a href="/audio/{{ $audio->slug ?: $audio->id }}" class="block group/title">
+                            <h3 class="text-2xl font-extrabold text-white mb-3 group-hover/title:text-red-500 transition">
+                                {{ $audio->title }}
+                            </h3>
+                        </a>
 
                         @if($audio->description)
                         <p class="text-gray-400 text-sm leading-relaxed mb-6">
@@ -158,19 +178,16 @@
                     <!-- BUTTONS -->
                     <div class="flex items-center justify-end gap-3 mt-4">
 
-                        @if($audio->audio_url)
-                        <a href="{{ $audio->audio_url }}"
-                           target="_blank"
+                        <a href="/audio/{{ $audio->slug ?: $audio->id }}"
                            class="px-4 py-2 border border-white/20 text-white
                            text-xs tracking-[2px] uppercase
                            hover:bg-white/10
-                           transition duration-300 rounded-full flex items-center gap-1.5">
+                           transition duration-300 rounded-full flex items-center gap-1.5 font-medium">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
-                            Listen
+                            Listen Pack
                         </a>
-                        @endif
 
                         @if($audio->buy_url)
                         <a href="{{ $audio->buy_url }}"
@@ -178,7 +195,7 @@
                            class="px-5 py-2 border border-red-500 text-red-500
                            text-xs tracking-[3px] uppercase
                            hover:bg-red-500 hover:text-white
-                           transition duration-300 rounded-full">
+                           transition duration-300 rounded-full font-medium">
                             {{ $audio->buy_label ?: 'Buy Now' }}
                         </a>
                         @endif
@@ -193,8 +210,7 @@
             <div class="audio-card relative group bg-[#111] border border-white/5 rounded-3xl overflow-hidden hover:border-red-500/40 transition duration-500"
                  data-category="EDIT PACK">
 
-                <a href="https://soundcloud.com/superflame99/sets/supernova"
-                   target="_blank"
+                <a href="/audio/supernova-edit-pack"
                    class="block relative overflow-hidden">
                     <img src="{{ asset('storage/audio/supernova.png') }}"
                          onerror="this.src='{{ asset('assets/sflamered.png') }}'"
@@ -209,15 +225,21 @@
                         </span>
                     </div>
 
-                    <h3 class="text-2xl font-extrabold text-white mb-3">
-                        SUPERNOVA EDIT PACK
-                    </h3>
+                    <a href="/audio/supernova-edit-pack">
+                        <h3 class="text-2xl font-extrabold text-white mb-3 hover:text-red-500 transition">
+                            SUPERNOVA EDIT PACK
+                        </h3>
+                    </a>
 
                     <p class="text-gray-400 text-sm leading-relaxed mb-6">
                         Raw industrial grooves and underground energy recorded live during SUPERFLAME sessions.
                     </p>
                     
-                    <div class="flex justify-end">
+                    <div class="flex items-center justify-end gap-3">
+                        <a href="/audio/supernova-edit-pack"
+                           class="px-4 py-2 border border-white/20 text-white text-xs tracking-[2px] uppercase hover:bg-white/10 transition duration-300 rounded-full">
+                            Listen Pack
+                        </a>
                         <button onclick="window.open('https://lynk.id/superflame', '_blank')"
                                 class="px-5 py-2 border border-red-500 text-red-500 text-xs tracking-[3px] uppercase hover:bg-red-500 hover:text-white transition duration-300 rounded-full">
                             Buy Now
@@ -237,7 +259,6 @@
 <!-- CATEGORY FILTER SCRIPT -->
 <script>
 function filterAudio(category, btn) {
-    // Update active tab buttons
     document.querySelectorAll('.category-btn').forEach(b => {
         b.classList.remove('text-white', 'border-b-2', 'border-red-500');
         b.classList.add('text-gray-500');
@@ -245,7 +266,6 @@ function filterAudio(category, btn) {
     btn.classList.remove('text-gray-500');
     btn.classList.add('text-white', 'border-b-2', 'border-red-500');
 
-    // Filter cards
     const cards = document.querySelectorAll('.audio-card');
     cards.forEach(card => {
         const cardCategory = card.getAttribute('data-category');

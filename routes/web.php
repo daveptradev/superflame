@@ -16,12 +16,14 @@ use App\Models\Event;
 use App\Models\Product;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Audio;
 use Illuminate\Support\Str;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\ShippingController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\LiveSetController;
 use App\Http\Controllers\Admin\EventController;
+use App\Http\Controllers\Admin\AudioController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\MidtransCallbackController;
@@ -342,7 +344,8 @@ Route::get('/rosters', function () {
 });
 
 Route::get('/audio', function () {
-    return view('audio');
+    $audios = Audio::latest()->get();
+    return view('audio', compact('audios'));
 });
 
 Route::get('/profile', function () {
@@ -706,6 +709,14 @@ Route::middleware(['auth', 'admin'])
         */
 
         Route::resource('events', EventController::class);
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUDIOS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::resource('audios', AudioController::class);
 
     });
     

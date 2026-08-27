@@ -93,10 +93,10 @@
                 @endif
 
                 <div class="text-xs text-gray-500 space-y-1 pt-1">
-                    @if($audio->release_date)
+                    @if(!empty($audio->release_date))
                     <div class="flex items-center gap-2">
                         <span class="text-gray-400">Release:</span>
-                        <span>{{ \Carbon\Carbon::parse($audio->release_date)->format('d M Y') }}</span>
+                        <span>{{ date('d M Y', strtotime($audio->release_date)) }}</span>
                     </div>
                     @endif
 

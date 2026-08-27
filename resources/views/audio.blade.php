@@ -137,9 +137,9 @@
                             <span class="text-xs tracking-[3px] uppercase text-red-500 font-semibold">
                                 {{ $audio->artist ?: 'SUPERFLAME' }}
                             </span>
-                            @if($audio->release_date)
+                            @if(!empty($audio->release_date))
                             <span class="text-xs text-gray-500">
-                                {{ \Carbon\Carbon::parse($audio->release_date)->format('Y') }}
+                                {{ date('Y', strtotime($audio->release_date)) }}
                             </span>
                             @endif
                         </div>

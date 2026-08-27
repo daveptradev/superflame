@@ -50,7 +50,12 @@ class AudioController extends Controller
     // =========================
     public function index()
     {
-        $audios = Audio::latest()->get();
+        try {
+            $audios = Audio::latest()->get();
+        } catch (\Throwable $e) {
+            $audios = collect();
+            session()->flash('error', 'Tabel database "audios" belum ada di database Hostinger. Silakan jalankan query SQL di phpMyAdmin.');
+        }
 
         return view('admin.audios.index', compact('audios'));
     }

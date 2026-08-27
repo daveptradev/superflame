@@ -344,7 +344,11 @@ Route::get('/rosters', function () {
 });
 
 Route::get('/audio', function () {
-    $audios = Audio::latest()->get();
+    try {
+        $audios = Audio::latest()->get();
+    } catch (\Throwable $e) {
+        $audios = collect();
+    }
     return view('audio', compact('audios'));
 });
 

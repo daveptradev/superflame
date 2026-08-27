@@ -17,6 +17,11 @@ class AudioTrack extends Model
         'file_path',
         'duration',
         'track_number',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 
     public function audio()

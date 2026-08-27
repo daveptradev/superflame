@@ -345,7 +345,9 @@ Route::get('/rosters', function () {
 
 Route::get('/audio', function () {
     try {
-        $audios = Audio::with('tracks')->latest()->get();
+        $audios = Audio::with(['tracks' => function ($q) {
+            $q->where('is_active', true);
+        }])->latest()->get();
     } catch (\Throwable $e) {
         $audios = collect();
     }
@@ -353,11 +355,15 @@ Route::get('/audio', function () {
 });
 
 Route::get('/audio/{slug}', function ($slug) {
-    $audio = Audio::with('tracks')->where('slug', $slug)->first();
+    $audio = Audio::with(['tracks' => function ($q) {
+        $q->where('is_active', true);
+    }])->where('slug', $slug)->first();
 
     if (!$audio) {
         // Fallback: If not found by slug, try by ID or fallback
-        $audio = Audio::with('tracks')->find($slug);
+        $audio = Audio::with(['tracks' => function ($q) {
+            $q->where('is_active', true);
+        }])->find($slug);
     }
 
     if (!$audio) {
@@ -749,6 +755,7 @@ Route::middleware(['auth', 'admin'])
         |--------------------------------------------------------------------------
         */
 
+        Route::post('/audios/track/{track}/toggle', [AudioController::class, 'toggleTrackStatus']);
         Route::delete('/audios/track/{track}', [AudioController::class, 'deleteTrack']);
         Route::resource('audios', AudioController::class);
 

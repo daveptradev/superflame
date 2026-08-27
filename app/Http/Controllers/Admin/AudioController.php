@@ -195,12 +195,17 @@ class AudioController extends Controller
             'release_date' => $request->release_date,
         ]);
 
-        // 3. Update Existing Track Titles
+        // 3. Update Existing Track Titles & Active Statuses
         if ($request->has('existing_track_titles')) {
+            $activeStatuses = $request->input('existing_track_active', []);
             foreach ($request->input('existing_track_titles') as $trackId => $newTitle) {
+                $isActive = isset($activeStatuses[$trackId]) ? true : false;
                 AudioTrack::where('id', $trackId)
                     ->where('audio_id', $audio->id)
-                    ->update(['title' => $newTitle]);
+                    ->update([
+                        'title'     => $newTitle,
+                        'is_active' => $isActive,
+                    ]);
             }
         }
 
@@ -224,6 +229,7 @@ class AudioController extends Controller
                         'title'        => $cleanTitle,
                         'file_path'    => 'audio/tracks/' . $trackFileName,
                         'track_number' => $currentMaxOrder + $index + 1,
+                        'is_active'    => true,
                     ]);
                 }
             }
@@ -231,6 +237,26 @@ class AudioController extends Controller
 
         return redirect('/admin/audios')
             ->with('success', 'Audio updated successfully');
+    }
+
+    // =========================
+    // TOGGLE TRACK ACTIVE/INACTIVE
+    // =========================
+    public function toggleTrackStatus(AudioTrack $track)
+    {
+        $track->is_active = !$track->is_active;
+        $track->save();
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success'   => true,
+                'is_active' => $track->is_active,
+                'message'   => $track->is_active ? 'Track activated' : 'Track disabled',
+            ]);
+        }
+
+        return redirect()->back()
+            ->with('success', 'Track status updated to ' . ($track->is_active ? 'Active (Visible)' : 'Disabled (Hidden)'));
     }
 
     // =========================

@@ -186,9 +186,11 @@
             @if($audio->tracks->count() > 0)
             <div class="space-y-3 mb-6">
                 @foreach($audio->tracks as $index => $track)
-                <div class="bg-[#161616] border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div id="trackRowCard-{{ $track->id }}"
+                     class="bg-[#161616] border {{ $track->is_active ?? true ? 'border-white/10' : 'border-red-500/20 opacity-60' }} rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition duration-200">
+                    
                     <div class="flex items-center gap-3 w-full md:w-auto">
-                        <span class="w-7 h-7 rounded-lg bg-red-500/20 text-red-400 font-bold text-xs flex items-center justify-center flex-shrink-0">
+                        <span class="w-7 h-7 rounded-lg {{ $track->is_active ?? true ? 'bg-red-500/20 text-red-400' : 'bg-gray-700 text-gray-400' }} font-bold text-xs flex items-center justify-center flex-shrink-0">
                             {{ $track->track_number ?? ($index + 1) }}
                         </span>
                         <div class="flex-1 min-w-0">
@@ -203,8 +205,28 @@
                     </div>
 
                     <div class="flex items-center gap-3 w-full md:w-auto justify-end">
-                        <audio controls src="{{ asset('storage/' . $track->file_path) }}" class="h-8 max-w-[200px]"></audio>
+                        <audio controls src="{{ asset('storage/' . $track->file_path) }}" class="h-8 max-w-[180px]"></audio>
 
+                        <!-- ON / OFF TOGGLE SWITCH -->
+                        <div class="flex items-center">
+                            <button type="button"
+                                    id="toggleBtn-{{ $track->id }}"
+                                    onclick="toggleTrackStatusAjax('{{ $track->id }}')"
+                                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border {{ $track->is_active ?? true ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700' }}"
+                                    title="Toggle track visibility on user page">
+                                <span id="toggleDot-{{ $track->id }}" class="w-2 h-2 rounded-full {{ $track->is_active ?? true ? 'bg-green-500 animate-pulse' : 'bg-gray-500' }}"></span>
+                                <span id="toggleText-{{ $track->id }}">{{ $track->is_active ?? true ? 'ON (Visible)' : 'OFF (Hidden)' }}</span>
+                            </button>
+                            <!-- Hidden checkbox synced for form submit -->
+                            <input type="checkbox"
+                                   name="existing_track_active[{{ $track->id }}]"
+                                   id="trackActiveCheckbox-{{ $track->id }}"
+                                   value="1"
+                                   class="hidden"
+                                   {{ $track->is_active ?? true ? 'checked' : '' }}>
+                        </div>
+
+                        <!-- DELETE BUTTON -->
                         <button type="button"
                                 onclick="deleteTrackAjax('{{ $track->id }}', this)"
                                 class="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
@@ -334,6 +356,52 @@ function deleteTrackAjax(trackId, btn) {
         form.action = '/admin/audios/track/' + trackId;
         form.submit();
     }
+}
+
+function toggleTrackStatusAjax(trackId) {
+    const btn = document.getElementById('toggleBtn-' + trackId);
+    const dot = document.getElementById('toggleDot-' + trackId);
+    const text = document.getElementById('toggleText-' + trackId);
+    const checkbox = document.getElementById('trackActiveCheckbox-' + trackId);
+    const card = document.getElementById('trackRowCard-' + trackId);
+
+    // Optimistic UI toggle
+    btn.disabled = true;
+
+    fetch('/admin/audios/track/' + trackId + '/toggle', {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+            const isActive = data.is_active;
+            checkbox.checked = isActive;
+            
+            if (isActive) {
+                btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20';
+                dot.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                text.innerText = 'ON (Visible)';
+                card.classList.remove('border-red-500/20', 'opacity-60');
+                card.classList.add('border-white/10');
+            } else {
+                btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700';
+                dot.className = 'w-2 h-2 rounded-full bg-gray-500';
+                text.innerText = 'OFF (Hidden)';
+                card.classList.remove('border-white/10');
+                card.classList.add('border-red-500/20', 'opacity-60');
+            }
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        alert('Failed to toggle track status. Please try again.');
+    });
 }
 
 // Drag & Drop logic

@@ -29,4 +29,9 @@ class Audio extends Model
     {
         return $this->hasMany(AudioTrack::class, 'audio_id')->orderBy('track_number')->orderBy('id');
     }
+
+    public function activeTracks()
+    {
+        return $this->hasMany(AudioTrack::class, 'audio_id')->where('is_active', true)->orderBy('track_number')->orderBy('id');
+    }
 }

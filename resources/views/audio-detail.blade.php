@@ -4,6 +4,9 @@
 
 @section('content')
 
+<!-- WAVESURFER.JS CDN FOR REAL AUDIO WAVEFORM -->
+<script src="https://unpkg.com/wavesurfer.js@7"></script>
+
 <!-- DETAIL CONTAINER -->
 <section class="px-4 md:px-8 pt-10 pb-36 bg-[#0a0a0a] min-h-screen text-white">
 
@@ -102,7 +105,7 @@
                            target="_blank"
                            class="border border-white/20 text-gray-300 hover:text-white hover:bg-white/10 px-5 py-3.5 rounded-full font-semibold text-xs tracking-wider uppercase transition flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-orange-500 fill-current" viewBox="0 0 24 24">
-                                <path d="M17.812 10.04c-.294 0-.58.034-.854.098a4.85 4.85 0 00-4.556-3.23 4.84 4.84 0 00-1.964.41.45.45 0 00-.27.41v8.61a.45.45 0 00.45.45h7.194a3.374 3.374 0 000-6.748zM6.21 8.842a.45.45 0 00-.45.45v6.944a.45.45 0 10.9 0V9.292a.45.45 0 00-.45-.45z"/>
+                                <path d="M17.812 10.04c-.294 0-.58.034-.854.098a4.85 4.85 0 00-4.556-3.23 4.84 4.84 0 00-1.964.41.45.45 0 00-.27.41v8.61a.45.45 0 00.45.45h7.194a3.374 3.374 0 000-6.748zM6.21 8.842a.45.45 0 00-.45.45v6.944a.45.45 0 10.9 0V9.292a.45.45 0 00-.45-.45zm-2.11 1.366a.45.45 0 00-.45.45v5.578a.45.45 0 10.9 0v-5.578a.45.45 0 00-.45-.45zm4.22-2.18a.45.45 0 00-.45.45v7.758a.45.45 0 10.9 0V8.478a.45.45 0 00-.45-.45z"/>
                             </svg>
                             SoundCloud
                         </a>
@@ -213,12 +216,12 @@
 </section>
 
 <!-- ================================================================= -->
-<!-- SOUNDCLOUD / SPOTIFY-STYLE DOCKED MINI PLAYER -->
+<!-- SOUNDCLOUD / SPOTIFY-STYLE DOCKED MINI PLAYER WITH REAL WAVEFORM -->
 <!-- ================================================================= -->
 <div id="miniPlayer"
-     class="fixed bottom-0 left-0 right-0 z-50 bg-[#090909]/95 backdrop-blur-xl border-t border-white/10 shadow-2xl transition-all duration-500 transform translate-y-full">
+     class="fixed bottom-0 left-0 right-0 z-50 bg-[#080808]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl transition-all duration-500 transform translate-y-full">
     
-    <div class="w-full max-w-[1400px] mx-auto px-4 md:px-8 py-3.5">
+    <div class="w-full max-w-[1400px] mx-auto px-4 md:px-8 py-3">
         
         <div class="flex flex-col md:flex-row items-center justify-between gap-3 md:gap-6">
 
@@ -238,62 +241,63 @@
                 </div>
             </div>
 
-            <!-- 2. CENTER: CONTROLS & TIMELINE -->
-            <div class="flex-1 w-full max-w-2xl flex flex-col items-center gap-1.5">
+            <!-- 2. CENTER: CONTROLS & REAL SOUNDCLOUD WAVEFORM -->
+            <div class="flex-1 w-full max-w-2xl flex flex-col items-center gap-1">
                 
-                <!-- BUTTONS (PREV, PLAY/PAUSE, NEXT) -->
-                <div class="flex items-center gap-5">
-                    <!-- PREVIOUS -->
-                    <button onclick="prevTrack()"
-                            class="text-gray-400 hover:text-white transition p-1 hover:scale-110"
-                            title="Previous Track">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
-                        </svg>
-                    </button>
+                <!-- TOP ROW: BUTTONS (PREV, PLAY/PAUSE, NEXT) & TIME -->
+                <div class="flex items-center justify-between w-full">
+                    <span id="currentTimeText" class="text-[11px] text-gray-400 font-mono w-12 text-left">00:00</span>
 
-                    <!-- PLAY / PAUSE -->
-                    <button id="playPauseBtn"
-                            onclick="togglePlay()"
-                            class="w-11 h-11 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition shadow-lg shadow-red-600/40 hover:scale-105"
-                            title="Play/Pause">
-                        <svg id="playIcon" class="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z"/>
-                        </svg>
-                        <svg id="pauseIcon" class="w-5 h-5 hidden fill-current" viewBox="0 0 24 24">
-                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                        </svg>
-                    </button>
+                    <div class="flex items-center gap-4">
+                        <!-- PREVIOUS -->
+                        <button onclick="prevTrack()"
+                                class="text-gray-400 hover:text-white transition p-1 hover:scale-110"
+                                title="Previous Track">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                            </svg>
+                        </button>
 
-                    <!-- NEXT -->
-                    <button onclick="nextTrack()"
-                            class="text-gray-400 hover:text-white transition p-1 hover:scale-110"
-                            title="Next Track">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
-                        </svg>
-                    </button>
-                </div>
+                        <!-- PLAY / PAUSE -->
+                        <button id="playPauseBtn"
+                                onclick="togglePlay()"
+                                class="w-10 h-10 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition shadow-lg shadow-red-600/40 hover:scale-105"
+                                title="Play/Pause">
+                            <svg id="playIcon" class="w-4 h-4 ml-0.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                            <svg id="pauseIcon" class="w-4 h-4 hidden fill-current" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                            </svg>
+                        </button>
 
-                <!-- PROGRESS TIMELINE SCRUBBER -->
-                <div class="w-full flex items-center gap-3">
-                    <span id="currentTimeText" class="text-[11px] text-gray-400 font-mono w-10 text-right">00:00</span>
-                    
-                    <div id="progressContainer"
-                         onclick="seekTrack(event)"
-                         class="flex-1 h-1.5 bg-white/10 hover:h-2.5 rounded-full cursor-pointer relative group transition-all duration-200">
-                        <!-- PROGRESS BAR FILL -->
-                        <div id="progressBar" class="h-full bg-red-600 rounded-full w-0 relative">
-                            <span class="w-3 h-3 bg-white rounded-full absolute -right-1.5 -top-[3px] opacity-0 group-hover:opacity-100 transition shadow"></span>
-                        </div>
+                        <!-- NEXT -->
+                        <button onclick="nextTrack()"
+                                class="text-gray-400 hover:text-white transition p-1 hover:scale-110"
+                                title="Next Track">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                            </svg>
+                        </button>
                     </div>
 
-                    <span id="durationText" class="text-[11px] text-gray-400 font-mono w-10">00:00</span>
+                    <span id="durationText" class="text-[11px] text-gray-400 font-mono w-12 text-right">00:00</span>
+                </div>
+
+                <!-- REAL SOUNDCLOUD AUDIO WAVEFORM CONTAINER -->
+                <div class="w-full relative py-1">
+                    <!-- LOADING INDICATOR -->
+                    <div id="waveformLoading" class="hidden absolute inset-0 bg-[#080808]/80 z-10 flex items-center justify-center gap-2">
+                        <span class="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                        <span class="text-[11px] text-gray-400 font-semibold tracking-wider uppercase">Decoding Waveform...</span>
+                    </div>
+
+                    <div id="waveform" class="w-full cursor-pointer overflow-hidden rounded-lg"></div>
                 </div>
 
             </div>
 
-            <!-- 3. RIGHT: VOLUME & CLOSE BUTTON -->
+            <!-- 3. RIGHT: VOLUME & BUY SHORTCUT -->
             <div class="hidden md:flex items-center justify-end gap-3 w-1/4">
                 
                 <!-- VOLUME BUTTON -->
@@ -328,10 +332,7 @@
 
 </div>
 
-<!-- HIDDEN AUDIO ELEMENT -->
-<audio id="coreAudioPlayer" preload="metadata"></audio>
-
-<!-- PLAYER JAVASCRIPT LOGIC -->
+<!-- PLAYER JAVASCRIPT WITH REAL WAVESURFER AUDIO WAVEFORM -->
 <script>
 const tracks = [
     @if(isset($audio->tracks))
@@ -345,19 +346,68 @@ const tracks = [
 ];
 
 let currentTrackIndex = -1;
-let isPlaying = false;
+let wavesurfer = null;
 
-const audioPlayer = document.getElementById('coreAudioPlayer');
 const miniPlayer = document.getElementById('miniPlayer');
 const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
 const playerTrackTitle = document.getElementById('playerTrackTitle');
-const progressBar = document.getElementById('progressBar');
 const currentTimeText = document.getElementById('currentTimeText');
 const durationText = document.getElementById('durationText');
 const volumeSlider = document.getElementById('volumeSlider');
+const waveformLoading = document.getElementById('waveformLoading');
 
-audioPlayer.volume = 0.8;
+// Initialize Real WaveSurfer instance
+function initWaveSurfer() {
+    if (wavesurfer) return;
+
+    wavesurfer = WaveSurfer.create({
+        container: '#waveform',
+        waveColor: 'rgba(255, 255, 255, 0.25)',
+        progressColor: '#ef4444',
+        cursorColor: '#ffffff',
+        cursorWidth: 2,
+        barWidth: 3,
+        barGap: 2,
+        barRadius: 2,
+        height: 38,
+        normalize: true,
+        responsive: true,
+        fillParent: true,
+    });
+
+    wavesurfer.setVolume(0.8);
+
+    wavesurfer.on('loading', (percent) => {
+        if (waveformLoading) waveformLoading.classList.remove('hidden');
+    });
+
+    wavesurfer.on('ready', () => {
+        if (waveformLoading) waveformLoading.classList.add('hidden');
+        durationText.innerText = formatTime(wavesurfer.getDuration());
+        wavesurfer.play();
+        updatePlayStateUI();
+        updateActiveTrackRow();
+    });
+
+    wavesurfer.on('timeupdate', (currentTime) => {
+        currentTimeText.innerText = formatTime(currentTime);
+    });
+
+    wavesurfer.on('finish', () => {
+        nextTrack();
+    });
+
+    wavesurfer.on('play', () => {
+        updatePlayStateUI();
+        updateActiveTrackRow();
+    });
+
+    wavesurfer.on('pause', () => {
+        updatePlayStateUI();
+        updateActiveTrackRow();
+    });
+}
 
 function playTrack(index) {
     if (index < 0 || index >= tracks.length) return;
@@ -365,35 +415,22 @@ function playTrack(index) {
     currentTrackIndex = index;
     const track = tracks[currentTrackIndex];
 
-    audioPlayer.src = track.src;
+    initWaveSurfer();
+
     playerTrackTitle.innerText = track.title;
+    miniPlayer.classList.remove('translate-y-full');
 
-    audioPlayer.play().then(() => {
-        isPlaying = true;
-        updatePlayStateUI();
-        miniPlayer.classList.remove('translate-y-full');
-    }).catch(err => {
-        console.warn('Audio play prevented:', err);
-    });
-
+    if (waveformLoading) waveformLoading.classList.remove('hidden');
+    wavesurfer.load(track.src);
     updateActiveTrackRow();
 }
 
 function togglePlay() {
-    if (currentTrackIndex === -1 && tracks.length > 0) {
-        playTrack(0);
+    if (!wavesurfer || currentTrackIndex === -1) {
+        if (tracks.length > 0) playTrack(0);
         return;
     }
-
-    if (audioPlayer.paused) {
-        audioPlayer.play();
-        isPlaying = true;
-    } else {
-        audioPlayer.pause();
-        isPlaying = false;
-    }
-    updatePlayStateUI();
-    updateActiveTrackRow();
+    wavesurfer.playPause();
 }
 
 function prevTrack() {
@@ -411,7 +448,7 @@ function nextTrack() {
 }
 
 function updatePlayStateUI() {
-    if (!audioPlayer.paused) {
+    if (wavesurfer && wavesurfer.isPlaying()) {
         playIcon.classList.add('hidden');
         pauseIcon.classList.remove('hidden');
     } else {
@@ -429,7 +466,7 @@ function updateActiveTrackRow() {
         if (idx === currentTrackIndex) {
             row.classList.add('bg-red-500/10', 'border-red-500/40');
             title.classList.add('text-red-400');
-            if (!audioPlayer.paused) {
+            if (wavesurfer && wavesurfer.isPlaying()) {
                 num.classList.add('hidden');
                 eq.classList.remove('hidden');
                 eq.classList.add('flex');
@@ -448,51 +485,17 @@ function updateActiveTrackRow() {
     });
 }
 
-// Time update
-audioPlayer.addEventListener('timeupdate', () => {
-    if (!audioPlayer.duration) return;
-    const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-    progressBar.style.width = `${progress}%`;
-    currentTimeText.innerText = formatTime(audioPlayer.currentTime);
-});
-
-audioPlayer.addEventListener('loadedmetadata', () => {
-    durationText.innerText = formatTime(audioPlayer.duration);
-});
-
-audioPlayer.addEventListener('ended', () => {
-    nextTrack();
-});
-
-audioPlayer.addEventListener('play', () => {
-    updatePlayStateUI();
-    updateActiveTrackRow();
-});
-
-audioPlayer.addEventListener('pause', () => {
-    updatePlayStateUI();
-    updateActiveTrackRow();
-});
-
-function seekTrack(e) {
-    const container = document.getElementById('progressContainer');
-    const rect = container.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const width = rect.width;
-    const duration = audioPlayer.duration;
-
-    if (duration) {
-        audioPlayer.currentTime = (clickX / width) * duration;
+function setVolume(val) {
+    if (wavesurfer) {
+        wavesurfer.setVolume(parseFloat(val));
     }
 }
 
-function setVolume(val) {
-    audioPlayer.volume = val;
-}
-
 function toggleMute() {
-    audioPlayer.muted = !audioPlayer.muted;
-    volumeSlider.value = audioPlayer.muted ? 0 : audioPlayer.volume;
+    if (!wavesurfer) return;
+    const isMuted = wavesurfer.getMuted();
+    wavesurfer.setMuted(!isMuted);
+    volumeSlider.value = !isMuted ? 0 : wavesurfer.getVolume();
 }
 
 function formatTime(seconds) {

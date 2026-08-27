@@ -18,10 +18,12 @@ class AudioTrack extends Model
         'duration',
         'track_number',
         'is_active',
+        'allow_download',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'is_active'      => 'boolean',
+        'allow_download' => 'boolean',
     ];
 
     public function audio()

@@ -207,23 +207,42 @@
                     <div class="flex items-center gap-3 w-full md:w-auto justify-end">
                         <audio controls src="{{ asset('storage/' . $track->file_path) }}" class="h-8 max-w-[180px]"></audio>
 
-                        <!-- ON / OFF TOGGLE SWITCH -->
+                        <!-- TRACK VISIBILITY ON / OFF TOGGLE -->
                         <div class="flex items-center">
                             <button type="button"
                                     id="toggleBtn-{{ $track->id }}"
                                     onclick="toggleTrackStatusAjax('{{ $track->id }}')"
-                                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border {{ $track->is_active ?? true ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700' }}"
+                                    class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border {{ $track->is_active ?? true ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20' : 'bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700' }}"
                                     title="Toggle track visibility on user page">
                                 <span id="toggleDot-{{ $track->id }}" class="w-2 h-2 rounded-full {{ $track->is_active ?? true ? 'bg-green-500 animate-pulse' : 'bg-gray-500' }}"></span>
-                                <span id="toggleText-{{ $track->id }}">{{ $track->is_active ?? true ? 'ON (Visible)' : 'OFF (Hidden)' }}</span>
+                                <span id="toggleText-{{ $track->id }}">{{ $track->is_active ?? true ? 'Track ON' : 'Track OFF' }}</span>
                             </button>
-                            <!-- Hidden checkbox synced for form submit -->
                             <input type="checkbox"
                                    name="existing_track_active[{{ $track->id }}]"
                                    id="trackActiveCheckbox-{{ $track->id }}"
                                    value="1"
                                    class="hidden"
                                    {{ $track->is_active ?? true ? 'checked' : '' }}>
+                        </div>
+
+                        <!-- DOWNLOAD BUTTON ON / OFF TOGGLE -->
+                        <div class="flex items-center">
+                            <button type="button"
+                                    id="downloadToggleBtn-{{ $track->id }}"
+                                    onclick="toggleTrackDownloadAjax('{{ $track->id }}')"
+                                    class="px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border {{ $track->allow_download ?? true ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20' : 'bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700' }}"
+                                    title="Toggle Free Download button on user page">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                <span id="downloadToggleText-{{ $track->id }}">{{ $track->allow_download ?? true ? 'Download ON' : 'Download OFF' }}</span>
+                            </button>
+                            <input type="checkbox"
+                                   name="existing_track_download[{{ $track->id }}]"
+                                   id="trackDownloadCheckbox-{{ $track->id }}"
+                                   value="1"
+                                   class="hidden"
+                                   {{ $track->allow_download ?? true ? 'checked' : '' }}>
                         </div>
 
                         <!-- DELETE BUTTON -->
@@ -384,15 +403,15 @@ function toggleTrackStatusAjax(trackId) {
             checkbox.checked = isActive;
             
             if (isActive) {
-                btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20';
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20';
                 dot.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
-                text.innerText = 'ON (Visible)';
+                text.innerText = 'Track ON';
                 card.classList.remove('border-red-500/20', 'opacity-60');
                 card.classList.add('border-white/10');
             } else {
-                btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700';
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700';
                 dot.className = 'w-2 h-2 rounded-full bg-gray-500';
-                text.innerText = 'OFF (Hidden)';
+                text.innerText = 'Track OFF';
                 card.classList.remove('border-white/10');
                 card.classList.add('border-red-500/20', 'opacity-60');
             }
@@ -401,6 +420,43 @@ function toggleTrackStatusAjax(trackId) {
     .catch(err => {
         btn.disabled = false;
         alert('Failed to toggle track status. Please try again.');
+    });
+}
+
+function toggleTrackDownloadAjax(trackId) {
+    const btn = document.getElementById('downloadToggleBtn-' + trackId);
+    const text = document.getElementById('downloadToggleText-' + trackId);
+    const checkbox = document.getElementById('trackDownloadCheckbox-' + trackId);
+
+    btn.disabled = true;
+
+    fetch('/admin/audios/track/' + trackId + '/toggle-download', {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+            const isDownloadAllowed = data.allow_download;
+            checkbox.checked = isDownloadAllowed;
+
+            if (isDownloadAllowed) {
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20';
+                text.innerText = 'Download ON';
+            } else {
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border bg-gray-800 border-white/10 text-gray-400 hover:bg-gray-700';
+                text.innerText = 'Download OFF';
+            }
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        alert('Failed to toggle download status. Please try again.');
     });
 }
 

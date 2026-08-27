@@ -756,6 +756,7 @@ Route::middleware(['auth', 'admin'])
         */
 
         Route::post('/audios/track/{track}/toggle', [AudioController::class, 'toggleTrackStatus']);
+        Route::post('/audios/track/{track}/toggle-download', [AudioController::class, 'toggleTrackDownload']);
         Route::delete('/audios/track/{track}', [AudioController::class, 'deleteTrack']);
         Route::resource('audios', AudioController::class);
 

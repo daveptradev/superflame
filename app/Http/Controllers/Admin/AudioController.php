@@ -195,16 +195,21 @@ class AudioController extends Controller
             'release_date' => $request->release_date,
         ]);
 
-        // 3. Update Existing Track Titles & Active Statuses
+        // 3. Update Existing Track Titles & Statuses
         if ($request->has('existing_track_titles')) {
-            $activeStatuses = $request->input('existing_track_active', []);
+            $activeStatuses   = $request->input('existing_track_active', []);
+            $downloadStatuses = $request->input('existing_track_download', []);
+
             foreach ($request->input('existing_track_titles') as $trackId => $newTitle) {
-                $isActive = isset($activeStatuses[$trackId]) ? true : false;
+                $isActive      = isset($activeStatuses[$trackId]) ? true : false;
+                $allowDownload = isset($downloadStatuses[$trackId]) ? true : false;
+
                 AudioTrack::where('id', $trackId)
                     ->where('audio_id', $audio->id)
                     ->update([
-                        'title'     => $newTitle,
-                        'is_active' => $isActive,
+                        'title'          => $newTitle,
+                        'is_active'      => $isActive,
+                        'allow_download' => $allowDownload,
                     ]);
             }
         }
@@ -225,11 +230,12 @@ class AudioController extends Controller
                     $trackFile->move($trackDir, $trackFileName);
 
                     AudioTrack::create([
-                        'audio_id'     => $audio->id,
-                        'title'        => $cleanTitle,
-                        'file_path'    => 'audio/tracks/' . $trackFileName,
-                        'track_number' => $currentMaxOrder + $index + 1,
-                        'is_active'    => true,
+                        'audio_id'       => $audio->id,
+                        'title'          => $cleanTitle,
+                        'file_path'      => 'audio/tracks/' . $trackFileName,
+                        'track_number'   => $currentMaxOrder + $index + 1,
+                        'is_active'      => true,
+                        'allow_download' => true,
                     ]);
                 }
             }
@@ -257,6 +263,26 @@ class AudioController extends Controller
 
         return redirect()->back()
             ->with('success', 'Track status updated to ' . ($track->is_active ? 'Active (Visible)' : 'Disabled (Hidden)'));
+    }
+
+    // =========================
+    // TOGGLE TRACK DOWNLOAD BUTTON (ON/OFF)
+    // =========================
+    public function toggleTrackDownload(AudioTrack $track)
+    {
+        $track->allow_download = !$track->allow_download;
+        $track->save();
+
+        if (request()->ajax() || request()->wantsJson()) {
+            return response()->json([
+                'success'        => true,
+                'allow_download' => $track->allow_download,
+                'message'        => $track->allow_download ? 'Download enabled' : 'Download disabled',
+            ]);
+        }
+
+        return redirect()->back()
+            ->with('success', 'Download button ' . ($track->allow_download ? 'Enabled' : 'Disabled'));
     }
 
     // =========================

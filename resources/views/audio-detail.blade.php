@@ -170,8 +170,9 @@
 
                     </div>
 
-                    <!-- RIGHT: FREE DOWNLOAD BUTTON -->
+                    <!-- RIGHT: FREE DOWNLOAD BUTTON (IF ALLOWED) -->
                     <div class="flex items-center gap-3 flex-shrink-0 pl-3">
+                        @if($track->allow_download ?? true)
                         <a href="{{ asset('storage/' . $track->file_path) }}"
                            download="{{ $track->title }}"
                            onclick="event.stopPropagation()"
@@ -183,6 +184,7 @@
                             <span class="hidden sm:inline">Free Download</span>
                             <span class="sm:hidden">Download</span>
                         </a>
+                        @endif
                     </div>
 
                 </div>

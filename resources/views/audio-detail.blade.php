@@ -4,9 +4,6 @@
 
 @section('content')
 
-<!-- WAVESURFER.JS CDN -->
-<script src="https://unpkg.com/wavesurfer.js@7"></script>
-
 <!-- DETAIL CONTAINER -->
 <section class="px-4 md:px-8 pt-10 pb-36 bg-[#0a0a0a] min-h-screen text-white">
 
@@ -216,7 +213,7 @@
 </section>
 
 <!-- ================================================================= -->
-<!-- SOUNDCLOUD / SPOTIFY-STYLE DOCKED MINI PLAYER (INSTANT STREAMING) -->
+<!-- SOUNDCLOUD REAL CANVAS WAVEFORM MINI PLAYER -->
 <!-- ================================================================= -->
 <div id="miniPlayer"
      class="fixed bottom-0 left-0 right-0 z-50 bg-[#080808]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl transition-all duration-500 transform translate-y-full">
@@ -241,8 +238,8 @@
                 </div>
             </div>
 
-            <!-- 2. CENTER: CONTROLS & INSTANT WAVEFORM -->
-            <div class="flex-1 w-full max-w-2xl flex flex-col items-center gap-1">
+            <!-- 2. CENTER: CONTROLS & SOUNDCLOUD CANVAS WAVEFORM -->
+            <div class="flex-1 w-full max-w-2xl flex flex-col items-center gap-1.5">
                 
                 <!-- TOP ROW: BUTTONS (PREV, PLAY/PAUSE, NEXT) & TIME -->
                 <div class="flex items-center justify-between w-full">
@@ -284,9 +281,16 @@
                     <span id="durationText" class="text-[11px] text-gray-400 font-mono w-12 text-right">00:00</span>
                 </div>
 
-                <!-- INSTANT SOUNDCLOUD AUDIO WAVEFORM CONTAINER -->
-                <div class="w-full relative py-0.5">
-                    <div id="waveform" class="w-full cursor-pointer overflow-hidden rounded-lg"></div>
+                <!-- REAL SOUNDCLOUD CANVAS WAVEFORM CONTAINER -->
+                <div class="w-full relative group py-0.5">
+                    <!-- FLOATING TIMESTAMP TOOLTIP ON HOVER -->
+                    <div id="hoverTooltip" class="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-6 bg-red-600 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow transition duration-150 transform -translate-x-1/2">
+                        00:00
+                    </div>
+
+                    <canvas id="waveformCanvas"
+                            class="w-full h-11 cursor-pointer rounded-lg transition"
+                            height="44"></canvas>
                 </div>
 
             </div>
@@ -326,10 +330,10 @@
 
 </div>
 
-<!-- NATIVE STREAMING AUDIO ELEMENT FOR INSTANT PLAYBACK -->
+<!-- NATIVE AUDIO ELEMENT -->
 <audio id="nativeAudioPlayer" preload="auto"></audio>
 
-<!-- PLAYER JAVASCRIPT: INSTANT STREAMING + REALTIME WAVEFORM -->
+<!-- SOUNDCLOUD REAL CANVAS WAVEFORM VISUALIZER SCRIPT -->
 <script>
 const tracks = [
     @if(isset($audio->tracks))
@@ -343,7 +347,9 @@ const tracks = [
 ];
 
 let currentTrackIndex = -1;
-let wavesurfer = null;
+let waveformPeaks = [];
+let hoverProgress = -1;
+let audioCtx = null;
 
 const nativePlayer = document.getElementById('nativeAudioPlayer');
 const miniPlayer = document.getElementById('miniPlayer');
@@ -353,64 +359,125 @@ const playerTrackTitle = document.getElementById('playerTrackTitle');
 const currentTimeText = document.getElementById('currentTimeText');
 const durationText = document.getElementById('durationText');
 const volumeSlider = document.getElementById('volumeSlider');
+const waveformCanvas = document.getElementById('waveformCanvas');
+const hoverTooltip = document.getElementById('hoverTooltip');
+const ctx = waveformCanvas.getContext('2d');
 
 nativePlayer.volume = 0.8;
 
-// Initialize WaveSurfer bound directly to native streaming audio element
-function initWaveSurfer() {
-    if (wavesurfer) return;
-
-    wavesurfer = WaveSurfer.create({
-        container: '#waveform',
-        waveColor: 'rgba(255, 255, 255, 0.25)',
-        progressColor: '#ef4444',
-        cursorColor: '#ffffff',
-        cursorWidth: 2,
-        barWidth: 3,
-        barGap: 2,
-        barRadius: 2,
-        height: 38,
-        media: nativePlayer, // 🔥 Binds to streaming HTMLAudioElement (Plays immediately in <100ms!)
-        normalize: true,
-        responsive: true,
-        fillParent: true,
+// GENERATE REAL DYNAMIC PEAKS FROM AUDIO URL VIA WEB AUDIO API (NON-BLOCKING)
+function generateWaveformPeaks(src) {
+    const NUM_BARS = 100;
+    
+    // Default initial dynamic waveform pattern
+    waveformPeaks = Array.from({ length: NUM_BARS }, (_, i) => {
+        const sinWave = Math.sin((i / NUM_BARS) * Math.PI);
+        const rand = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+        return Math.max(0.15, Math.min(0.95, (sinWave * 0.7) + (Math.abs(rand) * 0.3)));
     });
+    drawWaveform();
 
-    wavesurfer.on('timeupdate', (currentTime) => {
-        currentTimeText.innerText = formatTime(currentTime);
-    });
-
-    wavesurfer.on('seeking', (currentTime) => {
-        currentTimeText.innerText = formatTime(currentTime);
-    });
-
-    wavesurfer.on('finish', () => {
-        nextTrack();
-    });
-
-    wavesurfer.on('play', () => {
-        updatePlayStateUI(true);
-        updateActiveTrackRow();
-    });
-
-    wavesurfer.on('pause', () => {
-        updatePlayStateUI(false);
-        updateActiveTrackRow();
-    });
+    // Async decode real audio buffer in background without blocking audio playback
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        fetch(src)
+            .then(res => res.arrayBuffer())
+            .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+            .then(audioBuffer => {
+                const rawData = audioBuffer.getChannelData(0);
+                const step = Math.floor(rawData.length / NUM_BARS);
+                const realPeaks = [];
+                for (let i = 0; i < NUM_BARS; i++) {
+                    let min = 1.0, max = -1.0;
+                    for (let j = 0; j < step; j++) {
+                        const datum = rawData[(i * step) + j];
+                        if (datum < min) min = datum;
+                        if (datum > max) max = datum;
+                    }
+                    realPeaks.push(Math.max(0.12, (max - min) / 2));
+                }
+                waveformPeaks = realPeaks;
+                drawWaveform();
+            })
+            .catch(err => {
+                // Keep default simulated waveform if CORS/decode blocked
+            });
+    } catch(e) {}
 }
 
+// DRAW SOUNDCLOUD DUAL-TONE WAVEFORM ON CANVAS
+function drawWaveform() {
+    const width = waveformCanvas.clientWidth || 600;
+    const height = waveformCanvas.height;
+    
+    if (waveformCanvas.width !== width) {
+        waveformCanvas.width = width;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+
+    const totalBars = waveformPeaks.length || 100;
+    const barWidth = 3;
+    const barGap = 2;
+    const effectiveTotalWidth = totalBars * (barWidth + barGap);
+    const startX = (width - effectiveTotalWidth) / 2;
+
+    const currentProgress = (nativePlayer.duration && nativePlayer.duration > 0)
+        ? (nativePlayer.currentTime / nativePlayer.duration)
+        : 0;
+
+    for (let i = 0; i < totalBars; i++) {
+        const barHeight = Math.max(4, (waveformPeaks[i] || 0.3) * (height - 8));
+        const x = startX + (i * (barWidth + barGap));
+        const y = (height - barHeight) / 2;
+        const barProgress = i / totalBars;
+
+        // Soundcloud Color Logic
+        if (barProgress <= currentProgress) {
+            ctx.fillStyle = '#ef4444'; // Played (Red)
+        } else if (hoverProgress >= 0 && barProgress <= hoverProgress) {
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.4)'; // Hover preview
+        } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // Unplayed (Translucent White)
+        }
+
+        // Draw Rounded Bar
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, barHeight, 2);
+        } else {
+            ctx.rect(x, y, barWidth, barHeight);
+        }
+        ctx.fill();
+    }
+
+    // Draw White Needle Cursor at playhead
+    const cursorX = startX + (currentProgress * effectiveTotalWidth);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cursorX - 1, 2, 2, height - 4);
+
+    // Glow dot on needle
+    ctx.beginPath();
+    ctx.arc(cursorX, 4, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
+// PLAY TRACK (INSTANT STREAMING)
 function playTrack(index) {
     if (index < 0 || index >= tracks.length) return;
 
     currentTrackIndex = index;
     const track = tracks[currentTrackIndex];
 
-    initWaveSurfer();
-
     playerTrackTitle.innerText = track.title;
     miniPlayer.classList.remove('translate-y-full');
 
-    // 1. INSTANT PLAYBACK VIA STREAMING NATIVE AUDIO
+    generateWaveformPeaks(track.src);
+
     nativePlayer.src = track.src;
     nativePlayer.load();
 
@@ -420,7 +487,7 @@ function playTrack(index) {
             updatePlayStateUI(true);
             updateActiveTrackRow();
         }).catch(err => {
-            console.warn('Playback notice:', err);
+            console.warn('Play notice:', err);
         });
     }
 
@@ -495,17 +562,66 @@ function updateActiveTrackRow() {
     });
 }
 
-// Native Player events for duration and timeline
+// TIMELINE SEEKING VIA CLICK ON CANVAS
+function seekFromEvent(e) {
+    const rect = waveformCanvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const progress = Math.max(0, Math.min(1, clickX / rect.width));
+
+    if (nativePlayer.duration && isFinite(nativePlayer.duration)) {
+        nativePlayer.currentTime = progress * nativePlayer.duration;
+        drawWaveform();
+    }
+}
+
+waveformCanvas.addEventListener('click', seekFromEvent);
+
+waveformCanvas.addEventListener('mousemove', (e) => {
+    const rect = waveformCanvas.getBoundingClientRect();
+    const hoverX = e.clientX - rect.left;
+    hoverProgress = Math.max(0, Math.min(1, hoverX / rect.width));
+    
+    if (nativePlayer.duration && isFinite(nativePlayer.duration)) {
+        const hoverTime = hoverProgress * nativePlayer.duration;
+        hoverTooltip.style.left = `${hoverX}px`;
+        hoverTooltip.innerText = formatTime(hoverTime);
+    }
+    drawWaveform();
+});
+
+waveformCanvas.addEventListener('mouseleave', () => {
+    hoverProgress = -1;
+    drawWaveform();
+});
+
+// NATIVE PLAYER TIMEUPDATE & EVENTS
+nativePlayer.addEventListener('timeupdate', () => {
+    currentTimeText.innerText = formatTime(nativePlayer.currentTime);
+    drawWaveform();
+});
+
 nativePlayer.addEventListener('loadedmetadata', () => {
     durationText.innerText = formatTime(nativePlayer.duration);
+    drawWaveform();
 });
 
 nativePlayer.addEventListener('durationchange', () => {
     durationText.innerText = formatTime(nativePlayer.duration);
+    drawWaveform();
 });
 
 nativePlayer.addEventListener('ended', () => {
     nextTrack();
+});
+
+nativePlayer.addEventListener('play', () => {
+    updatePlayStateUI(true);
+    updateActiveTrackRow();
+});
+
+nativePlayer.addEventListener('pause', () => {
+    updatePlayStateUI(false);
+    updateActiveTrackRow();
 });
 
 function setVolume(val) {
@@ -523,6 +639,11 @@ function formatTime(seconds) {
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
+
+// Window resize redraw
+window.addEventListener('resize', () => {
+    drawWaveform();
+});
 
 // Keyboard shortcuts (Space to toggle play/pause)
 document.addEventListener('keydown', (e) => {

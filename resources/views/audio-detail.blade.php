@@ -346,10 +346,14 @@ const tracks = [
     @endif
 ];
 
+const NUM_BARS = 100;
+const peaksCache = {}; // Cache decoded real peaks per track URL
 let currentTrackIndex = -1;
 let waveformPeaks = [];
+let targetPeaks = [];
 let hoverProgress = -1;
 let audioCtx = null;
+let animFrameId = null;
 
 const nativePlayer = document.getElementById('nativeAudioPlayer');
 const miniPlayer = document.getElementById('miniPlayer');
@@ -365,44 +369,88 @@ const ctx = waveformCanvas.getContext('2d');
 
 nativePlayer.volume = 0.8;
 
-// GENERATE REAL DYNAMIC PEAKS FROM AUDIO URL VIA WEB AUDIO API (NON-BLOCKING)
-function generateWaveformPeaks(src) {
-    const NUM_BARS = 100;
-    
-    // Default initial dynamic waveform pattern
-    waveformPeaks = Array.from({ length: NUM_BARS }, (_, i) => {
-        const sinWave = Math.sin((i / NUM_BARS) * Math.PI);
-        const rand = (Math.sin(i * 12.9898) * 43758.5453) % 1;
-        return Math.max(0.15, Math.min(0.95, (sinWave * 0.7) + (Math.abs(rand) * 0.3)));
+// BACKGROUND PRE-DECODE REAL PEAKS FOR ALL TRACKS ON PAGE LOAD
+function predecodeAllTracks() {
+    tracks.forEach((t) => {
+        decodeTrackPeaks(t.src);
     });
-    drawWaveform();
+}
 
-    // Async decode real audio buffer in background without blocking audio playback
-    try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        fetch(src)
-            .then(res => res.arrayBuffer())
-            .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
-            .then(audioBuffer => {
-                const rawData = audioBuffer.getChannelData(0);
-                const step = Math.floor(rawData.length / NUM_BARS);
-                const realPeaks = [];
-                for (let i = 0; i < NUM_BARS; i++) {
-                    let min = 1.0, max = -1.0;
-                    for (let j = 0; j < step; j++) {
-                        const datum = rawData[(i * step) + j];
-                        if (datum < min) min = datum;
-                        if (datum > max) max = datum;
-                    }
-                    realPeaks.push(Math.max(0.12, (max - min) / 2));
+function decodeTrackPeaks(src) {
+    if (peaksCache[src]) return Promise.resolve(peaksCache[src]);
+
+    return fetch(src)
+        .then(res => res.arrayBuffer())
+        .then(arrayBuffer => {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx.decodeAudioData(arrayBuffer);
+        })
+        .then(audioBuffer => {
+            const rawData = audioBuffer.getChannelData(0);
+            const step = Math.floor(rawData.length / NUM_BARS);
+            const realPeaks = [];
+            for (let i = 0; i < NUM_BARS; i++) {
+                let min = 1.0, max = -1.0;
+                for (let j = 0; j < step; j++) {
+                    const datum = rawData[(i * step) + j];
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
                 }
-                waveformPeaks = realPeaks;
-                drawWaveform();
-            })
-            .catch(err => {
-                // Keep default simulated waveform if CORS/decode blocked
-            });
-    } catch(e) {}
+                realPeaks.push(Math.max(0.12, Math.min(0.95, (max - min) * 0.9)));
+            }
+            peaksCache[src] = realPeaks;
+            return realPeaks;
+        })
+        .catch(err => {
+            // If CORS or offline, fallback to realistic techno envelope
+            return null;
+        });
+}
+
+// GENERATE OR RETRIEVE PEAKS FOR CURRENT TRACK
+function setupWaveformForTrack(src) {
+    if (peaksCache[src]) {
+        // Real peaks already cached in memory -> INSTANT display of true waveform!
+        waveformPeaks = [...peaksCache[src]];
+        drawWaveform();
+    } else {
+        // Generate realistic initial distribution while decoding in background
+        waveformPeaks = Array.from({ length: NUM_BARS }, (_, i) => {
+            const noise = ((Math.sin(i * 99) * 10000) % 1);
+            const beat = (i % 8 === 0 || i % 8 === 4) ? 0.35 : 0;
+            return Math.max(0.18, Math.min(0.85, 0.3 + (Math.abs(noise) * 0.35) + beat));
+        });
+        drawWaveform();
+
+        // Decode in background and smooth transition
+        decodeTrackPeaks(src).then(realPeaks => {
+            if (realPeaks && currentTrackIndex >= 0 && tracks[currentTrackIndex].src === src) {
+                animatePeaksTransition(realPeaks);
+            }
+        });
+    }
+}
+
+// SMOOTH TRANSITION TO REAL PEAKS
+function animatePeaksTransition(newPeaks) {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    function step() {
+        let maxDiff = 0;
+        for (let i = 0; i < NUM_BARS; i++) {
+            const diff = newPeaks[i] - waveformPeaks[i];
+            waveformPeaks[i] += diff * 0.25;
+            if (Math.abs(diff) > maxDiff) maxDiff = Math.abs(diff);
+        }
+        drawWaveform();
+        if (maxDiff > 0.01) {
+            animFrameId = requestAnimationFrame(step);
+        } else {
+            waveformPeaks = [...newPeaks];
+            drawWaveform();
+        }
+    }
+    step();
 }
 
 // DRAW SOUNDCLOUD DUAL-TONE WAVEFORM ON CANVAS
@@ -416,7 +464,7 @@ function drawWaveform() {
 
     ctx.clearRect(0, 0, width, height);
 
-    const totalBars = waveformPeaks.length || 100;
+    const totalBars = waveformPeaks.length || NUM_BARS;
     const barWidth = 3;
     const barGap = 2;
     const effectiveTotalWidth = totalBars * (barWidth + barGap);
@@ -476,7 +524,7 @@ function playTrack(index) {
     playerTrackTitle.innerText = track.title;
     miniPlayer.classList.remove('translate-y-full');
 
-    generateWaveformPeaks(track.src);
+    setupWaveformForTrack(track.src);
 
     nativePlayer.src = track.src;
     nativePlayer.load();
@@ -643,6 +691,11 @@ function formatTime(seconds) {
 // Window resize redraw
 window.addEventListener('resize', () => {
     drawWaveform();
+});
+
+// Trigger pre-decoding when page loads so waveforms are instant
+window.addEventListener('DOMContentLoaded', () => {
+    predecodeAllTracks();
 });
 
 // Keyboard shortcuts (Space to toggle play/pause)

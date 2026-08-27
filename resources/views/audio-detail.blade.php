@@ -4,7 +4,7 @@
 
 @section('content')
 
-<!-- WAVESURFER.JS CDN FOR REAL AUDIO WAVEFORM -->
+<!-- WAVESURFER.JS CDN -->
 <script src="https://unpkg.com/wavesurfer.js@7"></script>
 
 <!-- DETAIL CONTAINER -->
@@ -216,7 +216,7 @@
 </section>
 
 <!-- ================================================================= -->
-<!-- SOUNDCLOUD / SPOTIFY-STYLE DOCKED MINI PLAYER WITH REAL WAVEFORM -->
+<!-- SOUNDCLOUD / SPOTIFY-STYLE DOCKED MINI PLAYER (INSTANT STREAMING) -->
 <!-- ================================================================= -->
 <div id="miniPlayer"
      class="fixed bottom-0 left-0 right-0 z-50 bg-[#080808]/95 backdrop-blur-2xl border-t border-white/10 shadow-2xl transition-all duration-500 transform translate-y-full">
@@ -241,7 +241,7 @@
                 </div>
             </div>
 
-            <!-- 2. CENTER: CONTROLS & REAL SOUNDCLOUD WAVEFORM -->
+            <!-- 2. CENTER: CONTROLS & INSTANT WAVEFORM -->
             <div class="flex-1 w-full max-w-2xl flex flex-col items-center gap-1">
                 
                 <!-- TOP ROW: BUTTONS (PREV, PLAY/PAUSE, NEXT) & TIME -->
@@ -284,14 +284,8 @@
                     <span id="durationText" class="text-[11px] text-gray-400 font-mono w-12 text-right">00:00</span>
                 </div>
 
-                <!-- REAL SOUNDCLOUD AUDIO WAVEFORM CONTAINER -->
-                <div class="w-full relative py-1">
-                    <!-- LOADING INDICATOR -->
-                    <div id="waveformLoading" class="hidden absolute inset-0 bg-[#080808]/80 z-10 flex items-center justify-center gap-2">
-                        <span class="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                        <span class="text-[11px] text-gray-400 font-semibold tracking-wider uppercase">Decoding Waveform...</span>
-                    </div>
-
+                <!-- INSTANT SOUNDCLOUD AUDIO WAVEFORM CONTAINER -->
+                <div class="w-full relative py-0.5">
                     <div id="waveform" class="w-full cursor-pointer overflow-hidden rounded-lg"></div>
                 </div>
 
@@ -332,7 +326,10 @@
 
 </div>
 
-<!-- PLAYER JAVASCRIPT WITH REAL WAVESURFER AUDIO WAVEFORM -->
+<!-- NATIVE STREAMING AUDIO ELEMENT FOR INSTANT PLAYBACK -->
+<audio id="nativeAudioPlayer" preload="auto"></audio>
+
+<!-- PLAYER JAVASCRIPT: INSTANT STREAMING + REALTIME WAVEFORM -->
 <script>
 const tracks = [
     @if(isset($audio->tracks))
@@ -348,6 +345,7 @@ const tracks = [
 let currentTrackIndex = -1;
 let wavesurfer = null;
 
+const nativePlayer = document.getElementById('nativeAudioPlayer');
 const miniPlayer = document.getElementById('miniPlayer');
 const playIcon = document.getElementById('playIcon');
 const pauseIcon = document.getElementById('pauseIcon');
@@ -355,9 +353,10 @@ const playerTrackTitle = document.getElementById('playerTrackTitle');
 const currentTimeText = document.getElementById('currentTimeText');
 const durationText = document.getElementById('durationText');
 const volumeSlider = document.getElementById('volumeSlider');
-const waveformLoading = document.getElementById('waveformLoading');
 
-// Initialize Real WaveSurfer instance
+nativePlayer.volume = 0.8;
+
+// Initialize WaveSurfer bound directly to native streaming audio element
 function initWaveSurfer() {
     if (wavesurfer) return;
 
@@ -371,26 +370,17 @@ function initWaveSurfer() {
         barGap: 2,
         barRadius: 2,
         height: 38,
+        media: nativePlayer, // 🔥 Binds to streaming HTMLAudioElement (Plays immediately in <100ms!)
         normalize: true,
         responsive: true,
         fillParent: true,
     });
 
-    wavesurfer.setVolume(0.8);
-
-    wavesurfer.on('loading', (percent) => {
-        if (waveformLoading) waveformLoading.classList.remove('hidden');
-    });
-
-    wavesurfer.on('ready', () => {
-        if (waveformLoading) waveformLoading.classList.add('hidden');
-        durationText.innerText = formatTime(wavesurfer.getDuration());
-        wavesurfer.play();
-        updatePlayStateUI();
-        updateActiveTrackRow();
-    });
-
     wavesurfer.on('timeupdate', (currentTime) => {
+        currentTimeText.innerText = formatTime(currentTime);
+    });
+
+    wavesurfer.on('seeking', (currentTime) => {
         currentTimeText.innerText = formatTime(currentTime);
     });
 
@@ -399,12 +389,12 @@ function initWaveSurfer() {
     });
 
     wavesurfer.on('play', () => {
-        updatePlayStateUI();
+        updatePlayStateUI(true);
         updateActiveTrackRow();
     });
 
     wavesurfer.on('pause', () => {
-        updatePlayStateUI();
+        updatePlayStateUI(false);
         updateActiveTrackRow();
     });
 }
@@ -420,17 +410,37 @@ function playTrack(index) {
     playerTrackTitle.innerText = track.title;
     miniPlayer.classList.remove('translate-y-full');
 
-    if (waveformLoading) waveformLoading.classList.remove('hidden');
-    wavesurfer.load(track.src);
+    // 1. INSTANT PLAYBACK VIA STREAMING NATIVE AUDIO
+    nativePlayer.src = track.src;
+    nativePlayer.load();
+
+    const playPromise = nativePlayer.play();
+    if (playPromise !== undefined) {
+        playPromise.then(() => {
+            updatePlayStateUI(true);
+            updateActiveTrackRow();
+        }).catch(err => {
+            console.warn('Playback notice:', err);
+        });
+    }
+
     updateActiveTrackRow();
 }
 
 function togglePlay() {
-    if (!wavesurfer || currentTrackIndex === -1) {
-        if (tracks.length > 0) playTrack(0);
+    if (currentTrackIndex === -1 && tracks.length > 0) {
+        playTrack(0);
         return;
     }
-    wavesurfer.playPause();
+
+    if (nativePlayer.paused) {
+        nativePlayer.play();
+        updatePlayStateUI(true);
+    } else {
+        nativePlayer.pause();
+        updatePlayStateUI(false);
+    }
+    updateActiveTrackRow();
 }
 
 function prevTrack() {
@@ -447,8 +457,8 @@ function nextTrack() {
     playTrack(nextIndex);
 }
 
-function updatePlayStateUI() {
-    if (wavesurfer && wavesurfer.isPlaying()) {
+function updatePlayStateUI(isPlaying) {
+    if (isPlaying) {
         playIcon.classList.add('hidden');
         pauseIcon.classList.remove('hidden');
     } else {
@@ -466,7 +476,7 @@ function updateActiveTrackRow() {
         if (idx === currentTrackIndex) {
             row.classList.add('bg-red-500/10', 'border-red-500/40');
             title.classList.add('text-red-400');
-            if (wavesurfer && wavesurfer.isPlaying()) {
+            if (!nativePlayer.paused) {
                 num.classList.add('hidden');
                 eq.classList.remove('hidden');
                 eq.classList.add('flex');
@@ -485,21 +495,30 @@ function updateActiveTrackRow() {
     });
 }
 
+// Native Player events for duration and timeline
+nativePlayer.addEventListener('loadedmetadata', () => {
+    durationText.innerText = formatTime(nativePlayer.duration);
+});
+
+nativePlayer.addEventListener('durationchange', () => {
+    durationText.innerText = formatTime(nativePlayer.duration);
+});
+
+nativePlayer.addEventListener('ended', () => {
+    nextTrack();
+});
+
 function setVolume(val) {
-    if (wavesurfer) {
-        wavesurfer.setVolume(parseFloat(val));
-    }
+    nativePlayer.volume = parseFloat(val);
 }
 
 function toggleMute() {
-    if (!wavesurfer) return;
-    const isMuted = wavesurfer.getMuted();
-    wavesurfer.setMuted(!isMuted);
-    volumeSlider.value = !isMuted ? 0 : wavesurfer.getVolume();
+    nativePlayer.muted = !nativePlayer.muted;
+    volumeSlider.value = nativePlayer.muted ? 0 : nativePlayer.volume;
 }
 
 function formatTime(seconds) {
-    if (isNaN(seconds)) return "00:00";
+    if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
